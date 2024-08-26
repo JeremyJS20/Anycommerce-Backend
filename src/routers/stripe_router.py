@@ -259,7 +259,7 @@ def calculate_taxes(
                                          variant.price])) * prod.cartInfo.amount),
                                     mongo_client=mongo_client
                                     ),
-            reference=f'{prod.product.name}, {', '.join([variant.value for variant in prod.cartInfo.variants])}.'
+            reference=f"{prod.product.name}, {', '.join([variant.value for variant in prod.cartInfo.variants])}."
         ) for prod in user_cart]
 
         user_address_db = mongo_client.addresses.find_one({'_id': ObjectId(calculate_taxes_request.addressId)})
