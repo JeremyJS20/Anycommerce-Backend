@@ -114,7 +114,8 @@ def setup_stripe_payment_intent(
         ) for cart in user_cart_db['cart']]
 
         amount = sum([int((prod.product.cost + sum(
-            [variant.price for variant in prod.cartInfo.variants if variant.price])) * prod.cartInfo.amount)
+            [variant.price for variant in prod.cartInfo.variants if variant.price] if prod.cartInfo.variants else [
+                0])) * prod.cartInfo.amount)
                       for prod in user_cart])
 
         payment_intent = stripe_client.payment_intents.create(
@@ -256,17 +257,17 @@ def calculate_taxes(
                                     target_currency=current_user.preferences.currency,
                                     amount=int((prod.product.cost + sum(
                                         [variant.price for variant in prod.cartInfo.variants if
-                                         variant.price])) * prod.cartInfo.amount),
+                                         variant.price] if prod.cartInfo.variants else [0])) * prod.cartInfo.amount),
                                     mongo_client=mongo_client
                                     ),
-            reference=f"{prod.product.name}, {', '.join([variant.value for variant in prod.cartInfo.variants])}."
+            reference=f"{prod.product.name}, {', '.join([variant.value for variant in prod.cartInfo.variants] if prod.cartInfo.variants else '')}."
         ) for prod in user_cart]
 
         user_address_db = mongo_client.addresses.find_one({'_id': ObjectId(calculate_taxes_request.addressId)})
 
         tax_calculation = stripe_client.tax.calculations.create(
             params=CalculationService.CreateParams(
-                currency="USD",
+                currency=current_user.preferences.currency,
                 customer_details=CalculationService.CreateParamsCustomerDetails(
                     address=CalculationService.CreateParamsCustomerDetailsAddress(
                         postal_code=user_address_db['postal_code'],
@@ -337,7 +338,7 @@ def place_order(
                         variants=product.cartInfo.variants,
                         totalPrice=int((product.product.cost + sum(
                             [variant.price for variant in product.cartInfo.variants if
-                             variant.price])) * product.cartInfo.amount)
+                             variant.price] if product.cartInfo.variants else [0])) * product.cartInfo.amount)
                     ))
 
                 total = int((product.product.cost + sum(
@@ -355,7 +356,7 @@ def place_order(
             else:
                 total = int((product.product.cost + sum(
                     [variant.price for variant in product.cartInfo.variants if
-                     variant.price])) * product.cartInfo.amount)
+                     variant.price] if product.cartInfo.variants else [0])) * product.cartInfo.amount)
 
                 if product.product.currency != current_user.preferences.currency:
                     subtotal_convertion = requests.get(
@@ -395,7 +396,7 @@ def place_order(
                             variants=product.cartInfo.variants,
                             totalPrice=int((product.product.cost + sum(
                                 [variant.price for variant in product.cartInfo.variants if
-                                 variant.price])) * product.cartInfo.amount)
+                                 variant.price] if product.cartInfo.variants else [0])) * product.cartInfo.amount)
                         )
                     ],
                     summary=OrderSummaryModel(

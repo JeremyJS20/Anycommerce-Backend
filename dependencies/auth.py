@@ -107,3 +107,13 @@ def validate_api_key_or_auth(
 
     raise AuthException(error_id=ErrorsIDs.AUTH_CREDENTIALS_COULD_NOT_BE_VALIDATED,
                         description=ErrorsDescriptionsObject[ErrorsIDs.AUTH_CREDENTIALS_COULD_NOT_BE_VALIDATED])
+    # try:
+    #
+    # except AuthException as ex:
+    #     if ex.error_id == ErrorsIDs.AUTH_TOKEN_EXPIRED:
+    #         return validate_api_key(api_key, mongo_client)
+    #
+    #     raise ex
+    #
+    # except Exception as ex:
+    #     raise ex

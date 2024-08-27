@@ -5,7 +5,7 @@ from typing import Annotated, Any, Mapping
 import stripe
 from fastapi import APIRouter, Depends, Form, Query
 from fastapi import status
-from jose import jwt
+from jose import jwt, ExpiredSignatureError, JWTError
 from passlib.context import CryptContext
 from pymongo.database import Database
 
@@ -17,7 +17,7 @@ from src.models.responses.token import TokenResponse
 from src.models.user import BaseUserModel, CreateUserModel
 from src.shared.exceptions import HttpException, AuthException
 from src.shared.generics import ErrorResponse, Error, Data, MessageResponse
-from src.utils.constants import ErrorsIDs, ErrorsDescriptions, Params, ResponseDescriptions
+from src.utils.constants import ErrorsIDs, ErrorsDescriptions, Params, ResponseDescriptions, ErrorsDescriptionsObject
 
 auth_router = APIRouter(tags=['Auth'])
 
@@ -94,6 +94,7 @@ def sign_in(
             )
 
         access_token_expires = datetime.now(timezone.utc) + timedelta(minutes=Params.ACCESS_TOKEN_EXPIRE_MINUTES)
+        refresh_token_expires = datetime.now(timezone.utc) + timedelta(minutes=Params.REFRESH_TOKEN_EXPIRE_MINUTES)
 
         encoded_jwt = jwt.encode(
             claims=dict(
@@ -104,7 +105,14 @@ def sign_in(
             algorithm=env_variables.auth_algorithm
         )
 
-        refresh_token = secrets.token_urlsafe(60)
+        refresh_token = jwt.encode(
+            claims=dict(
+                exp=refresh_token_expires,
+                sub=user['email']['value']
+            ),
+            key=env_variables.auth_secret_key,
+            algorithm=env_variables.auth_algorithm
+        )
 
         token = TokenResponse(
             accessToken=encoded_jwt,
@@ -158,7 +166,29 @@ def refresh_access_token(
                 description=ErrorsDescriptions.REFRESH_TOKEN_NOT_VALID
             )
 
+        token_data = token['data']
+
+        try:
+            jwt.decode(
+                token=token_data['refresh_token'],
+                key=env_variables.auth_secret_key,
+                algorithms=[env_variables.auth_algorithm]
+            )
+        except ExpiredSignatureError as err:
+            mongo_client.session_token.delete_one({'data.refresh_token': token_data['refresh_token']})
+            raise AuthException(error_id=ErrorsIDs.REFRESH_TOKEN_EXPIRED,
+                                description=ErrorsDescriptionsObject[ErrorsIDs.REFRESH_TOKEN_EXPIRED]
+                                )
+
+        except JWTError as err:
+            mongo_client.session_token.delete_one({'data.refresh_token': token_data['refresh_token']})
+            raise AuthException(
+                error_id=ErrorsIDs.REFRESH_TOKEN_COULD_NOT_BE_VALIDATED,
+                description=ErrorsDescriptionsObject[ErrorsIDs.REFRESH_TOKEN_COULD_NOT_BE_VALIDATED]
+            )
+
         access_token_expires = datetime.now(timezone.utc) + timedelta(minutes=Params.ACCESS_TOKEN_EXPIRE_MINUTES)
+        refresh_token_expires = datetime.now(timezone.utc) + timedelta(minutes=Params.REFRESH_TOKEN_EXPIRE_MINUTES)
 
         encoded_jwt = jwt.encode(
             claims=dict(
@@ -169,7 +199,14 @@ def refresh_access_token(
             algorithm=env_variables.auth_algorithm
         )
 
-        refresh_token = secrets.token_urlsafe(60)
+        refresh_token = jwt.encode(
+            claims=dict(
+                exp=refresh_token_expires,
+                sub=token['username']
+            ),
+            key=env_variables.auth_secret_key,
+            algorithm=env_variables.auth_algorithm
+        )
 
         new_token = TokenResponse(
             accessToken=encoded_jwt,

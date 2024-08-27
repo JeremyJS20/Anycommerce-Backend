@@ -138,8 +138,9 @@ def get_products(
             products_db = mongo_client.product.find(query).skip(offset).limit(Params.RECORDS_LIMIT)
             total_products = mongo_client.product.count_documents(query)
 
-        products = [ProductsResponse(
+        products = [ProductResponse(
             id=str(product['_id']),
+            storeId=str(product['store_id']),
             name=product['name'],
             cost=convert_currency(base_currency=product['currency'],
                                   target_currency=current_user.preferences.currency if current_user else product['currency'],
@@ -151,7 +152,10 @@ def get_products(
             category=product['category'],
             subcategory=product['subcategory'],
             rating=product.get('rating'),
-            imgs=product.get('imgs')
+            imgs=product.get('imgs'),
+            dates=product['dates'],
+            details=product['details'],
+            variants=product.get('variants')
         ).to_json() for product in products_db]
 
         if len(products) <= 0:

@@ -19,13 +19,18 @@ class ErrorsIDs:
     USER_ALREADY_HAVE_CART = 1013
     USER_ALREADY_HAVE_DEFAULT = 1014
     AUTH_CREDENTIALS_COULD_NOT_BE_VALIDATED = 1015
+    REFRESH_TOKEN_EXPIRED = 1016
+    REFRESH_TOKEN_COULD_NOT_BE_VALIDATED = 1017
 
 
 ErrorsDescriptionsObject = {
     ErrorsIDs.USER_ALREADY_HAVE_CART: 'User already have a cart',
     ErrorsIDs.USER_ALREADY_HAVE_DEFAULT: 'User already have a default {}',
     ErrorsIDs.NO_RECORDS_FOUND: "No {0} found",
-    ErrorsIDs.AUTH_CREDENTIALS_COULD_NOT_BE_VALIDATED: "Could not validate credentials"
+    ErrorsIDs.AUTH_CREDENTIALS_COULD_NOT_BE_VALIDATED: "Could not validate credentials",
+    ErrorsIDs.REFRESH_TOKEN_EXPIRED: "Refresh token expired",
+    ErrorsIDs.REFRESH_TOKEN_COULD_NOT_BE_VALIDATED: "Refresh token could not be validated"
+
 }
 
 
@@ -83,6 +88,7 @@ class ResponseDescriptions:
 
 class Params:
     ACCESS_TOKEN_EXPIRE_MINUTES = 60
+    REFRESH_TOKEN_EXPIRE_MINUTES = 14400
     RECORDS_LIMIT = 12
     REVIEWS_LIMIT = 5
 
