@@ -7,10 +7,12 @@ from pymongo.database import Database
 
 from dependencies.auth import validate_api_key
 from dependencies.mongodb import MongoDBClient
+from src.database.mongodb.collection.catalog_collection import get_categories
 from src.env_variables.env import env_variables
 from src.models.responses.catalogs import CountriesResponse, StatesResponse, CitiesResponse, CategoriesResponse
 from src.shared.exceptions import HttpException
-from src.shared.generics import Data
+from src.shared.generics import Data, ErrorResponse
+from src.utils.constants import ErrorsIDs, ErrorsDescriptionsObject
 
 catalogs_router = APIRouter(tags=['Catalogs'])
 countries_api_url = env_variables.countries_api_url
@@ -108,24 +110,24 @@ def get_country_state_cities(
 
 @catalogs_router.get('/categories', responses={
     status.HTTP_200_OK: {"model": Data[List[CategoriesResponse]], 'description': 'Categories found'},
+    status.HTTP_404_NOT_FOUND: {"model": Data[ErrorResponse], 'description': 'Categories not found'},
 }, status_code=status.HTTP_200_OK)
 def get_product_categories(
-        _: str = Depends(validate_api_key),
-        mongo_client: Database[Mapping[str, Any]] = Depends(MongoDBClient())
+        _: str = Depends(validate_api_key)
 ):
     try:
-        categories = mongo_client.categories.find()
+        categories = get_categories()
 
-        categories = [CategoriesResponse(
-            id=str(category['_id']),
-            name=category['name'],
-            description=category['description'],
-            subcategories=category['subcategories']
-        ) for category in categories]
+        if not categories:
+            raise HttpException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                error_id=ErrorsIDs.NO_RECORDS_FOUND,
+                description=ErrorsDescriptionsObject[ErrorsIDs.NO_RECORDS_FOUND].format('categories')
+            )
 
-        return Data[List[CategoriesResponse]](
-            data=categories
-        )
+        categories = [CategoriesResponse(**category.to_json()) for category in categories]
+
+        return Data[List[CategoriesResponse]](data=categories)
 
     except HttpException as ex:
         raise ex

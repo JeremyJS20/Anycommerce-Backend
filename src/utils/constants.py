@@ -29,8 +29,7 @@ ErrorsDescriptionsObject = {
     ErrorsIDs.NO_RECORDS_FOUND: "No {0} found",
     ErrorsIDs.AUTH_CREDENTIALS_COULD_NOT_BE_VALIDATED: "Could not validate credentials",
     ErrorsIDs.REFRESH_TOKEN_EXPIRED: "Refresh token expired",
-    ErrorsIDs.REFRESH_TOKEN_COULD_NOT_BE_VALIDATED: "Refresh token could not be validated"
-
+    ErrorsIDs.REFRESH_TOKEN_COULD_NOT_BE_VALIDATED: "Refresh token could not be validated",
 }
 
 
