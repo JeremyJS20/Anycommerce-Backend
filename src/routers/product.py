@@ -52,7 +52,7 @@ def create_product(
 
 
 @product_router.get('/', responses={
-    status.HTTP_200_OK: {"model": DataWithAdditional[List[ProductsResponse], PaginationData],
+    status.HTTP_200_OK: {"model": DataWithAdditional[List[ProductResponse], PaginationData],
                          'description': 'Products Found'},
     status.HTTP_404_NOT_FOUND: {"model": Error[ErrorResponse], 'description': 'Products Not Found'},
 }, status_code=status.HTTP_200_OK)
@@ -71,7 +71,7 @@ def get_products(
     try:
         queries = []
 
-        if search:
+        if search and len(search) > 0:
             search_patterns = [
                 {"name": {"$regex": re.compile(f".*{re.escape(word)}.*", re.IGNORECASE)}}
                 for word in search.split(sep=" ")
@@ -83,10 +83,10 @@ def get_products(
             # regex_pattern = re.compile(pattern, re.IGNORECASE)
             # query['name'] = {"$regex": regex_pattern}
 
-        if price_min and price_max:
-            price_pattern = [{'cost': {'$gte': price_min}}, {'cost': {'$lte': price_max}}]
-
-            queries.append({"$and": price_pattern})
+        # if price_min and price_max:
+        #     price_pattern = [{'cost': {'$gte': price_min}}, {'cost': {'$lte': price_max}}]
+        #
+        #     queries.append({"$and": price_pattern})
 
         if rating:
             rating_pattern = [{'rating': {'$gte': rating}}]
@@ -143,7 +143,8 @@ def get_products(
             storeId=str(product['store_id']),
             name=product['name'],
             cost=convert_currency(base_currency=product['currency'],
-                                  target_currency=current_user.preferences.currency if current_user else product['currency'],
+                                  target_currency=current_user.preferences.currency if current_user else product[
+                                      'currency'],
                                   amount=product['cost'],
                                   mongo_client=mongo_client
                                   ),
@@ -157,6 +158,9 @@ def get_products(
             details=product['details'],
             variants=product.get('variants')
         ).to_json() for product in products_db]
+
+        if price_min and price_max:
+            products = list(filter(lambda product: price_min <= product['cost'] <= price_max, products))
 
         if len(products) <= 0:
             raise HttpException(
@@ -173,7 +177,7 @@ def get_products(
 
             return int(total_products / Params.RECORDS_LIMIT) + 1
 
-        return DataWithAdditional[List[ProductsResponse], PaginationData](
+        return DataWithAdditional[List[ProductResponse], PaginationData](
             data=products,
             additionalData=PaginationData(
                 currentPage=index,
@@ -243,7 +247,8 @@ def get_product_by_id(
             storeId=str(product['store_id']),
             name=product['name'],
             cost=convert_currency(base_currency=product['currency'],
-                                  target_currency=current_user.preferences.currency if current_user else product['currency'],
+                                  target_currency=current_user.preferences.currency if current_user else product[
+                                      'currency'],
                                   amount=product['cost'],
                                   mongo_client=mongo_client
                                   ),

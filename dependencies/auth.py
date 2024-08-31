@@ -7,6 +7,9 @@ from jose import jwt, JWTError, ExpiredSignatureError
 from pymongo.database import Database
 
 from dependencies.mongodb import MongoDBClient
+from src.database.mongodb.collection.session_token_collection import get_session_token
+from src.database.mongodb.collection.user_collection import get_user_by_email
+from src.database.mongodb.collection.user_preferences_collection import get_user_preferences_by_id
 from src.env_variables.env import env_variables
 from src.models.user import BaseUserModel
 from src.shared.exceptions import AuthException
@@ -17,8 +20,7 @@ auth_scheme = HTTPBearer(auto_error=False)
 
 
 def validate_bearer_token(
-        credentials: HTTPAuthorizationCredentials = Depends(auth_scheme),
-        mongo_client: Database[Mapping[str, Any]] = Depends(MongoDBClient())
+        credentials: HTTPAuthorizationCredentials = Depends(auth_scheme)
 ):
     try:
         token = credentials.credentials
@@ -31,7 +33,7 @@ def validate_bearer_token(
             raise AuthException(error_id=ErrorsIDs.AUTH_SCHEME_NOT_VALID,
                                 description=ErrorsDescriptions.AUTH_SCHEME_NOT_VALID)
 
-        exist_token_db = mongo_client.session_token.find_one({'data.access_token': token}) is not None
+        exist_token_db = get_session_token(access_token=token) is not None
 
         if not exist_token_db:
             raise AuthException(error_id=ErrorsIDs.AUTH_TOKEN_NOT_VALID,
@@ -59,21 +61,20 @@ def validate_bearer_token(
 
 
 def get_current_user(
-        current_user: str = Depends(validate_bearer_token),
-        mongo_client: Database[Mapping[str, Any]] = Depends(MongoDBClient())
+        current_user: str = Depends(validate_bearer_token)
 ):
-    user = mongo_client.user.find_one({'email.value': current_user})
-    user_preferences = mongo_client.preferences.find_one({'user_id': str(user['_id'])})
+    user = get_user_by_email(current_user)
+    user_preferences = get_user_preferences_by_id(user_id=user.id)
 
     user_model = BaseUserModel(
-        id=str(user['_id']),
-        stripeId=user['stripe_id'],
-        name=user['name'],
-        lastName=user['last_name'],
-        email=user['email'],
-        phone=user.get('phone'),
-        role=user['role'],
-        preferences=user_preferences['preferences']
+        id=user.id,
+        stripeId=user.stripeId,
+        name=user.name,
+        lastName=user.lastName,
+        email=user.email,
+        phone=user.phone,
+        role=user.role,
+        preferences=user_preferences
     )
 
     return user_model
@@ -100,20 +101,10 @@ def validate_api_key_or_auth(
         mongo_client: Database[Mapping[str, Any]] = Depends(MongoDBClient())
 ):
     if credentials:
-        return get_current_user(validate_bearer_token(credentials, mongo_client), mongo_client)
+        return get_current_user(validate_bearer_token(credentials))
 
     if api_key:
         return validate_api_key(api_key, mongo_client)
 
     raise AuthException(error_id=ErrorsIDs.AUTH_CREDENTIALS_COULD_NOT_BE_VALIDATED,
                         description=ErrorsDescriptionsObject[ErrorsIDs.AUTH_CREDENTIALS_COULD_NOT_BE_VALIDATED])
-    # try:
-    #
-    # except AuthException as ex:
-    #     if ex.error_id == ErrorsIDs.AUTH_TOKEN_EXPIRED:
-    #         return validate_api_key(api_key, mongo_client)
-    #
-    #     raise ex
-    #
-    # except Exception as ex:
-    #     raise ex

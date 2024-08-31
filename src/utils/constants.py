@@ -77,6 +77,7 @@ StripeErrorsDescriptionsObject = {
 
 class ResponseDescriptions:
     USER_SIGNED_OUT_SUCCESS = "User signed out successfully"
+    USER_CREATED_SUCCESS = "User created successfully"
     RECORD_DELETED_SUCCESS = "{0} deleted successfully"
     RECORD_CREATED_SUCCESS = "{0} created successfully"
     RECORD_ADDED_SUCCESS = "{0} added successfully"

@@ -22,3 +22,10 @@ class StatesResponse(CommonModel):
 class CitiesResponse(CommonModel):
     id: str
     name: str
+
+
+class CategoriesResponse(CommonModel):
+    id: str
+    name: str
+    description: str
+    subcategories: List[str]

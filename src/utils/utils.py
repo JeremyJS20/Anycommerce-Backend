@@ -2,6 +2,8 @@ from datetime import datetime
 from typing import Mapping, Any
 
 import requests
+from bson import ObjectId as BaseObjectId
+from bson.errors import InvalidId
 from pymongo.database import Database
 from starlette import status
 
@@ -19,6 +21,25 @@ def camel_to_snake_case(input_dict):
                 snake_case_key = ''.join(['_' + c.lower() if c.isupper() else c for c in key])
                 snake_dict[snake_case_key.lstrip('_')] = convert_keys(value)
             return snake_dict
+        elif isinstance(d, list):
+            return [convert_keys(item) for item in d]
+        else:
+            return d
+
+    return convert_keys(input_dict)
+
+
+def snake_to_camel_case(input_dict):
+    def convert_keys(d):
+        if isinstance(d, dict):
+            camel_dict = {}
+            for key, value in d.items():
+                components = key.split('_')
+                camel_case_key = components[0] + ''.join(x.capitalize() for x in components[1:]) if components[
+                                                                                                        0] != '' else \
+                    components[1]
+                camel_dict[camel_case_key] = convert_keys(value)
+            return camel_dict
         elif isinstance(d, list):
             return [convert_keys(item) for item in d]
         else:
@@ -68,3 +89,17 @@ def convert_currency(base_currency: str, target_currency: str, amount: float,
 
 def convert_currency_2(target_convertion_rate: float, amount: float):
     return round(amount * target_convertion_rate)
+
+
+class ObjectIdTypeConverter(str):
+    @classmethod
+    def validate(cls, value, field=None):
+        try:
+            BaseObjectId(str(value))
+            return str(value)
+        except InvalidId as e:
+            raise ValueError("Not a valid ObjectId") from e
+
+    @classmethod
+    def __get_validators__(cls):
+        yield cls.validate

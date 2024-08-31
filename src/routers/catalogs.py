@@ -1,12 +1,14 @@
-from typing import List
+from typing import List, Mapping, Any
 
 import requests
 from fastapi import APIRouter, Depends, Path
 from fastapi import status
+from pymongo.database import Database
 
 from dependencies.auth import validate_api_key
+from dependencies.mongodb import MongoDBClient
 from src.env_variables.env import env_variables
-from src.models.responses.catalogs import CountriesResponse, StatesResponse, CitiesResponse
+from src.models.responses.catalogs import CountriesResponse, StatesResponse, CitiesResponse, CategoriesResponse
 from src.shared.exceptions import HttpException
 from src.shared.generics import Data
 
@@ -95,6 +97,34 @@ def get_country_state_cities(
 
         return Data[List[CitiesResponse]](
             data=cities
+        )
+
+    except HttpException as ex:
+        raise ex
+
+    except Exception as ex:
+        raise ex
+
+
+@catalogs_router.get('/categories', responses={
+    status.HTTP_200_OK: {"model": Data[List[CategoriesResponse]], 'description': 'Categories found'},
+}, status_code=status.HTTP_200_OK)
+def get_product_categories(
+        _: str = Depends(validate_api_key),
+        mongo_client: Database[Mapping[str, Any]] = Depends(MongoDBClient())
+):
+    try:
+        categories = mongo_client.categories.find()
+
+        categories = [CategoriesResponse(
+            id=str(category['_id']),
+            name=category['name'],
+            description=category['description'],
+            subcategories=category['subcategories']
+        ) for category in categories]
+
+        return Data[List[CategoriesResponse]](
+            data=categories
         )
 
     except HttpException as ex:
