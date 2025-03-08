@@ -1,3 +1,4 @@
+import math
 from datetime import datetime
 from typing import Mapping, Any
 
@@ -19,7 +20,15 @@ def camel_to_snake_case(input_dict):
             snake_dict = {}
             for key, value in d.items():
                 snake_case_key = ''.join(['_' + c.lower() if c.isupper() else c for c in key])
-                snake_dict[snake_case_key.lstrip('_')] = convert_keys(value)
+
+                print('key 1-> ', snake_case_key)
+
+                if snake_case_key == "id":
+                    snake_case_key = "_" + snake_case_key
+
+                print('key 2 -> ', snake_case_key)
+
+                snake_dict[snake_case_key] = convert_keys(value)
             return snake_dict
         elif isinstance(d, list):
             return [convert_keys(item) for item in d]
@@ -84,11 +93,11 @@ def convert_currency(base_currency: str, target_currency: str, amount: float,
                     target_convertion_rate=convertion['convertion_rates'][target_currency],
                     amount=amount)
 
-    return amount
+    return int(math.ceil(amount))
 
 
 def convert_currency_2(target_convertion_rate: float, amount: float):
-    return round(amount * target_convertion_rate)
+    return amount * target_convertion_rate
 
 
 class ObjectIdTypeConverter(str):

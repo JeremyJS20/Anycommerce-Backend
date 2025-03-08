@@ -43,15 +43,15 @@ class ProductItemOrderModel(CommonModel):
     variants: List[AttributeType]
     image: MediaModel
     discount: Optional[Discount] = None
-    totalPrice: float
+    totalPrice: int
 
 
 class OrderSummaryModel(CommonModel):
     currency: str
-    subtotal: float
-    shipping: float
-    taxes: float
-    totalAmount: float
+    subtotal: int
+    shipping: int
+    taxes: int
+    totalAmount: int
 
 
 class BillingInfoOrderModel(CommonModel):

@@ -2,7 +2,6 @@ import datetime
 import uuid
 from typing import Annotated, List, Mapping, Any, Union
 
-import requests
 from bson import ObjectId
 from fastapi import APIRouter, Depends, Path
 from fastapi import status
@@ -13,7 +12,13 @@ from stripe.tax import CalculationService
 from dependencies.auth import get_current_user
 from dependencies.mongodb import MongoDBClient
 from dependencies.stripe_client import StripeClientInstance
+from src.database.mongodb.collection.address_collection import get_user_address_by_address_id
+from src.database.mongodb.collection.cart_collection import get_user_cart
+from src.database.mongodb.collection.payment_intent_collection import get_user_payment_intent_by_status, \
+    update_payment_intent, insert_payment_intent, get_user_payment_intent_by_setup_id, delete_payment_intent
+from src.database.mongodb.schema.payment_intent_schema import PaymentIntentCollectionSchema
 from src.env_variables.env import env_variables
+from src.models.payment_intent import PaymentIntentModel
 from src.models.product import ProductModel
 from src.models.request.order import OrderModel, OrderDatesModel, CustomerInfoOrderModel, ShippingInfoOrderModel, \
     BillingInfoOrderModel, ProductItemOrderModel, OrderSummaryModel
@@ -33,7 +38,7 @@ currency_convertion_api_url = env_variables.currency_convertion_api_url
 
 
 @stripe_router.post('/payment-intent/setup', responses={
-    status.HTTP_201_CREATED: {"model": Data[SetupIntentResponse], 'description': 'Setup intent created'},
+    status.HTTP_201_CREATED: {"model": Data[PaymentIntentModel], 'description': 'Setup intent created'},
 }, status_code=status.HTTP_201_CREATED)
 def setup_stripe_payment_intent(
         current_user: Annotated[BaseUserModel, Depends(get_current_user)],
@@ -41,11 +46,11 @@ def setup_stripe_payment_intent(
         stripe_client: StripeClient = Depends(StripeClientInstance())
 ):
     try:
-        payment_intent_initiated = mongo_client.payment_intent.find_one(
-            {'user_id': current_user.id, 'status': PaymentIntentStatus.INITIATED.value})
+        payment_intent_initiated = get_user_payment_intent_by_status(user_id=current_user.id,
+                                                                     status=PaymentIntentStatus.INITIATED)
 
         if payment_intent_initiated:
-            current_setup_intent = stripe_client.setup_intents.retrieve(payment_intent_initiated['setup_intent_id'])
+            current_setup_intent = stripe_client.setup_intents.retrieve(payment_intent_initiated.setupIntentId)
 
             if current_setup_intent.status == 'succeeded':
                 current_setup_intent = stripe_client.setup_intents.create(
@@ -55,47 +60,43 @@ def setup_stripe_payment_intent(
                     )
                 )
 
-                intent_model = SetupIntentResponse(
+                intent_model = PaymentIntentModel(
                     setupIntentId=current_setup_intent.id,
-                    paymentIntentId=payment_intent_initiated['payment_intent_id'],
+                    paymentIntentId=payment_intent_initiated.paymentIntentId,
                     clientSecret=current_setup_intent.client_secret,
                     userId=current_user.id,
                     status=PaymentIntentStatus.INITIATED.value,
                     initiationDate=datetime.datetime.now(),
-                    endDate=None
+                    endDate=None,
+                    id=payment_intent_initiated.id
                 )
 
-                mongo_client.payment_intent.update_one(
-                    {"setup_intent_id": payment_intent_initiated['setup_intent_id']},
-                    {"$set": dict(
-                        setup_intent_id=current_setup_intent.id,
-                        client_secret=current_setup_intent.client_secret
-                    )}
-                )
+                updated_payment_intent = PaymentIntentCollectionSchema(**intent_model.to_schema())
 
-                return Data[SetupIntentResponse](
+                update_payment_intent(payment_intent_id=payment_intent_initiated.id,
+                                      updated_payment_intent=updated_payment_intent)
+
+                return Data[PaymentIntentModel](
                     data=intent_model
                 )
             else:
-
-                intent_model = SetupIntentResponse(
-                    setupIntentId=payment_intent_initiated['setup_intent_id'],
-                    paymentIntentId=payment_intent_initiated['payment_intent_id'],
-                    clientSecret=payment_intent_initiated['client_secret'],
+                intent_model = PaymentIntentModel(
+                    setupIntentId=current_setup_intent.id,
+                    paymentIntentId=payment_intent_initiated.paymentIntentId,
+                    clientSecret=current_setup_intent.client_secret,
                     userId=current_user.id,
                     status=PaymentIntentStatus.INITIATED.value,
                     initiationDate=datetime.datetime.now(),
-                    endDate=None
+                    endDate=None,
+                    id=None
                 )
 
-                mongo_client.payment_intent.update_one(
-                    {"setup_intent_id": payment_intent_initiated['setup_intent_id']},
-                    {"$set": dict(
-                        initiation_date=datetime.datetime.now()
-                    )}
-                )
+                updated_payment_intent = PaymentIntentCollectionSchema(**intent_model.to_schema())
 
-                return Data[SetupIntentResponse](
+                update_payment_intent(payment_intent_id=payment_intent_initiated.id,
+                                      updated_payment_intent=updated_payment_intent)
+
+                return Data[PaymentIntentModel](
                     data=intent_model
                 )
 
@@ -106,17 +107,13 @@ def setup_stripe_payment_intent(
             )
         )
 
-        user_cart_db = mongo_client.cart.find_one({'user_id': current_user.id})
+        cart = get_user_cart(user_id=current_user.id)
 
-        user_cart: List[CartResponse] = [CartResponse(
-            product=cart['product'],
-            cartInfo=cart['cart_info']
-        ) for cart in user_cart_db['cart']]
-
-        amount = sum([int((prod.product.cost + sum(
-            [variant.price for variant in prod.cartInfo.variants if variant.price] if prod.cartInfo.variants else [
-                0])) * prod.cartInfo.amount)
-                      for prod in user_cart])
+        amount = sum([convert_currency(mongo_client=mongo_client, base_currency=current_user.preferences.currency,
+                                       target_currency=prod.product.currency, amount=(prod.product.cost + sum(
+                [variant.price for variant in prod.cartInfo.variants if variant.price] if prod.cartInfo.variants else [
+                    0])) * prod.cartInfo.amount)
+                      for prod in cart.cart])
 
         payment_intent = stripe_client.payment_intents.create(
             params=PaymentIntentService.CreateParams(
@@ -127,19 +124,22 @@ def setup_stripe_payment_intent(
             )
         )
 
-        intent_model = SetupIntentResponse(
+        intent_model = PaymentIntentModel(
             setupIntentId=setup_intent.id,
             paymentIntentId=payment_intent.id,
             clientSecret=setup_intent.client_secret,
             userId=current_user.id,
             status=PaymentIntentStatus.INITIATED.value,
             initiationDate=datetime.datetime.now(),
-            endDate=None
+            endDate=None,
+            id=None
         )
 
-        mongo_client.payment_intent.insert_one(intent_model.to_schema())
+        inserted_payment_intent = PaymentIntentCollectionSchema(**intent_model.to_schema())
 
-        return Data[SetupIntentResponse](
+        insert_payment_intent(inserted_payment_intent=inserted_payment_intent)
+
+        return Data[PaymentIntentModel](
             data=intent_model
         )
 
@@ -156,27 +156,23 @@ def setup_stripe_payment_intent(
 }, status_code=status.HTTP_200_OK)
 def remove_stripe_payment_intent(
         current_user: Annotated[BaseUserModel, Depends(get_current_user)],
-        mongo_client: Database[Mapping[str, Any]] = Depends(MongoDBClient()),
         setup_intent_id: str = Path(alias="setupIntentId", min_length=1),
         stripe_client: StripeClient = Depends(StripeClientInstance())
 ):
     try:
-        payment_intent_db = mongo_client.payment_intent.find_one(
-            {'setup_intent_id': setup_intent_id, 'user_id': current_user.id})
+        payment_intent = get_user_payment_intent_by_setup_id(user_id=current_user.id, setup_intent_id=setup_intent_id)
 
-        if not payment_intent_db:
+        if not payment_intent:
             raise HttpException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 error_id=ErrorsIDs.NO_RECORDS_FOUND,
                 description=ErrorsDescriptionsObject[ErrorsIDs.NO_RECORDS_FOUND].format('Payment intent')
             )
 
-        mongo_client.payment_intent.delete_one({'setup_intent_id': setup_intent_id, 'user_id': current_user.id})
-
-        # payment_intent_stripe = stripe_client.payment_intents.retrieve(payment_intent_db['payment_intent_id'])
-
-        # if payment_intent_stripe.status != 'canceled':
-        stripe_client.payment_intents.cancel(payment_intent_db['payment_intent_id'])
+        if payment_intent.status not in [PaymentIntentStatus.SUCCESSFUL.value, PaymentIntentStatus.CANCELED.value,
+                                         PaymentIntentStatus.COMPLETED.value]:
+            delete_payment_intent(deleted_payment_intent_id=payment_intent.id)
+            stripe_client.payment_intents.cancel(payment_intent.paymentIntentId)
 
         return Data[MessageResponse](
             data=MessageResponse(
@@ -245,33 +241,28 @@ def calculate_taxes(
         stripe_client: StripeClient = Depends(StripeClientInstance())
 ):
     try:
-        user_cart_db = mongo_client.cart.find_one({'user_id': current_user.id})
-
-        user_cart: List[CartResponse] = [CartResponse(
-            product=cart['product'],
-            cartInfo=cart['cart_info']
-        ) for cart in user_cart_db['cart']]
+        cart = get_user_cart(user_id=current_user.id)
 
         line_items_stripe = [CalculationService.CreateParamsLineItem(
             amount=convert_currency(base_currency=prod.product.currency,
                                     target_currency=current_user.preferences.currency,
-                                    amount=int((prod.product.cost + sum(
+                                    amount=(prod.product.cost + sum(
                                         [variant.price for variant in prod.cartInfo.variants if
-                                         variant.price] if prod.cartInfo.variants else [0])) * prod.cartInfo.amount),
+                                         variant.price] if prod.cartInfo.variants else [0])) * prod.cartInfo.amount,
                                     mongo_client=mongo_client
                                     ),
             reference=f"{prod.product.name}, {', '.join([variant.value for variant in prod.cartInfo.variants] if prod.cartInfo.variants else '')}."
-        ) for prod in user_cart]
+        ) for prod in cart.cart]
 
-        user_address_db = mongo_client.addresses.find_one({'_id': ObjectId(calculate_taxes_request.addressId)})
+        user_address = get_user_address_by_address_id(address_id=calculate_taxes_request.addressId)
 
         tax_calculation = stripe_client.tax.calculations.create(
             params=CalculationService.CreateParams(
                 currency=current_user.preferences.currency,
                 customer_details=CalculationService.CreateParamsCustomerDetails(
                     address=CalculationService.CreateParamsCustomerDetailsAddress(
-                        postal_code=user_address_db['postal_code'],
-                        country=user_address_db['country']
+                        postal_code=user_address.postalCode,
+                        country=user_address.countryCode
                     ),
                     address_source='shipping'
                 ),
@@ -305,25 +296,25 @@ def place_order(
         stripe_client: StripeClient = Depends(StripeClientInstance())
 ):
     try:
-        user_cart_db = mongo_client.cart.find_one({'user_id': current_user.id})
-        user_address_db = mongo_client.addresses.find_one(
-            {'_id': ObjectId(place_order_request.shippingAddress), 'user_id': ObjectId(current_user.id)})
-        payment_intent_db = mongo_client.payment_intent.find_one(
-            {'user_id': current_user.id, 'status': PaymentIntentStatus.INITIATED.value})
-
-        user_cart: List[CartResponse] = [CartResponse(
-            product=ProductModel.to_model(cart['product']),
-            cartInfo=cart['cart_info']
-        ) for cart in user_cart_db['cart']]
+        cart = get_user_cart(user_id=current_user.id)
+        address = get_user_address_by_address_id(address_id=place_order_request.shippingAddress)
+        payment_intent = get_user_payment_intent_by_status(user_id=current_user.id,
+                                                           status=PaymentIntentStatus.INITIATED)
 
         orders: List[OrderModel] = []
 
-        for product in user_cart:
+        for product in cart.cart:
             existent_store_order: Union[List[OrderModel], OrderModel] = list(
                 filter(lambda order: order.storeId == product.product.storeId, orders))
 
             if len(existent_store_order) > 0:
                 existent_store_order = existent_store_order[0]
+
+                total = convert_currency(mongo_client=mongo_client, base_currency=product.product.currency,
+                                         target_currency=current_user.preferences.currency,
+                                         amount=(product.product.cost + sum(
+                                             [variant.price for variant in product.cartInfo.variants if
+                                              variant.price])) * product.cartInfo.amount)
 
                 existent_store_order.items.append(
                     ProductItemOrderModel(
@@ -336,33 +327,17 @@ def place_order(
                         price=product.product.cost,
                         currency=product.product.currency,
                         variants=product.cartInfo.variants,
-                        totalPrice=int((product.product.cost + sum(
-                            [variant.price for variant in product.cartInfo.variants if
-                             variant.price] if product.cartInfo.variants else [0])) * product.cartInfo.amount)
+                        totalPrice=total
                     ))
-
-                total = int((product.product.cost + sum(
-                    [variant.price for variant in product.cartInfo.variants if
-                     variant.price])) * product.cartInfo.amount)
-
-                if product.product.currency != current_user.preferences.currency:
-                    subtotal_convertion = requests.get(
-                        url=f'{currency_convertion_api_url}/pair/{product.product.currency}/{current_user.preferences.currency}/{total}')
-
-                    total = round(subtotal_convertion.json()['conversion_result'])
 
                 existent_store_order.summary.subtotal += total
 
             else:
-                total = int((product.product.cost + sum(
-                    [variant.price for variant in product.cartInfo.variants if
-                     variant.price] if product.cartInfo.variants else [0])) * product.cartInfo.amount)
-
-                if product.product.currency != current_user.preferences.currency:
-                    subtotal_convertion = requests.get(
-                        url=f'{currency_convertion_api_url}/pair/{product.product.currency}/{current_user.preferences.currency}/{total}')
-
-                    total = round(subtotal_convertion.json()['conversion_result'])
+                total = convert_currency(mongo_client=mongo_client, base_currency=product.product.currency,
+                                         target_currency=current_user.preferences.currency,
+                                         amount=(product.product.cost + sum(
+                                             [variant.price for variant in product.cartInfo.variants if
+                                              variant.price])) * product.cartInfo.amount)
 
                 existent_store_order = OrderModel(
                     storeId=product.product.storeId,
@@ -380,7 +355,7 @@ def place_order(
                         trackingNumber=str(uuid.uuid4())
                     ),
                     billingInfo=BillingInfoOrderModel(
-                        paymentIntentId=payment_intent_db['payment_intent_id'],
+                        paymentIntentId=payment_intent.paymentIntentId,
                         paymentMethod=place_order_request.paymentMethod
                     ),
                     items=[
@@ -394,9 +369,7 @@ def place_order(
                             price=product.product.cost,
                             currency=product.product.currency,
                             variants=product.cartInfo.variants,
-                            totalPrice=int((product.product.cost + sum(
-                                [variant.price for variant in product.cartInfo.variants if
-                                 variant.price] if product.cartInfo.variants else [0])) * product.cartInfo.amount)
+                            totalPrice=total
                         )
                     ],
                     summary=OrderSummaryModel(
@@ -413,7 +386,7 @@ def place_order(
         for order in orders:
             line_items_stripe = [
                 CalculationService.CreateParamsLineItem(
-                    amount=int(order.summary.subtotal),
+                    amount=order.summary.subtotal,
                     reference=f'{order.storeId}',
                     tax_behavior='exclusive'
                 )]
@@ -423,8 +396,8 @@ def place_order(
                     currency=current_user.preferences.currency,
                     customer_details=CalculationService.CreateParamsCustomerDetails(
                         address=CalculationService.CreateParamsCustomerDetailsAddress(
-                            postal_code=user_address_db['postal_code'],
-                            country=user_address_db['country']
+                            postal_code=address.postalCode,
+                            country=address.countryCode
                         ),
                         address_source='shipping'
                     ),
@@ -435,12 +408,12 @@ def place_order(
             order.summary.taxes = tax_calculation.tax_amount_exclusive or tax_calculation.tax_amount_inclusive
             order.summary.totalAmount = (order.summary.subtotal + order.summary.taxes + order.summary.shipping)
 
-        amount_to_pay_in_cents = int(sum([
+        amount_to_pay_in_cents = sum([
             order.summary.totalAmount for order in orders
-        ]) * 100)
+        ]) * 100
 
         stripe_client.payment_intents.update(
-            payment_intent_db['payment_intent_id'],
+            payment_intent.paymentIntentId,
             params=PaymentIntentService.UpdateParams(
                 payment_method_types=['card'],
                 customer=current_user.stripeId,
@@ -450,47 +423,21 @@ def place_order(
             )
         )
 
-        payment_intent = stripe_client.payment_intents.confirm(
-            payment_intent_db['payment_intent_id'],
+        payment_intent_stripe = stripe_client.payment_intents.confirm(
+            payment_intent.paymentIntentId,
             params=PaymentIntentService.ConfirmParams(
                 payment_method=place_order_request.paymentMethod
             )
         )
 
-        # if payment_intent.status.upper() == PaymentIntentStatus.PROCESSING.value:
-        #     mongo_client.payment_intent.update_one(
-        #         {"payment_intent_id": payment_intent_db['payment_intent_id']},
-        #         {"$set": dict(
-        #             status=PaymentIntentStatus.PROCESSING.value
-        #         )}
-        #     )
-        #
-        #     return JSONResponse(
-        #         status_code=status.ACCEPTED.value,
-        #         content=Data[MessageResponse](
-        #             data=MessageWithStatusResponse(
-        #                 status=f'{PaymentIntentStatus.PROCESSING.value}_PAYMENT'.lower(),
-        #                 message=ResponseDescriptions.PROCESSING_PAYMENT
-        #             )
-        #         ).to_json()
-        #     )
+        if payment_intent_stripe.status.upper() != PaymentIntentStatus.SUCCESSFUL.value:
+            payment_intent.status = PaymentIntentStatus.FAILED.value
+            payment_intent.endDate = datetime.datetime.now()
 
-        if payment_intent.status.upper() != PaymentIntentStatus.SUCCESSFUL.value:
-            payment_intent = stripe_client.payment_intents.create(
-                params=PaymentIntentService.CreateParams(
-                    payment_method_types=['card'],
-                    customer=current_user.stripeId,
-                    amount=1,
-                    currency=current_user.preferences.currency
-                )
-            )
+            update_payment_intent(payment_intent_id=payment_intent.id,
+                                  updated_payment_intent=PaymentIntentCollectionSchema(**payment_intent.to_schema()))
 
-            mongo_client.payment_intent.update_one(
-                {'user_id': current_user.id, 'status': PaymentIntentStatus.INITIATED.value},
-                {"$set": dict(
-                    payment_intent_id=payment_intent.id
-                )}
-            )
+            stripe_client.payment_intents.cancel(payment_intent.paymentIntentId)
 
             raise HttpException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -498,13 +445,10 @@ def place_order(
                 description="test"
             )
 
-        mongo_client.payment_intent.update_one(
-            {"payment_intent_id": payment_intent_db['payment_intent_id']},
-            {"$set": dict(
-                status=PaymentIntentStatus.SUCCESSFUL.value,
-                end_date=datetime.datetime.now()
-            )}
-        )
+        payment_intent.status = PaymentIntentStatus.SUCCESSFUL.value
+        payment_intent.endDate = datetime.datetime.now()
+
+        update_payment_intent(payment_intent_id=payment_intent.id, updated_payment_intent=PaymentIntentCollectionSchema(**payment_intent.to_schema()))
 
         mongo_client.orders.insert_many([order.to_schema() for order in orders])
 

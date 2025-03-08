@@ -28,16 +28,9 @@ class ProductDates(CommonModel):
 class ProductVariants(CommonModel):
     colors: Optional[List[AttributeType]] = None
     sizes: Optional[List[AttributeType]] = None
-    # extra: Dict[str, Any] = Field(default_factory=dict)
-
     model_config = {
         "extra": Extra.allow
     }
-
-    # def __init__(self, **data):
-    #     extra_data = {k: v for k, v in data.items() if k not in self.__fields__}
-    #     super().__init__(**data)
-    #     self.extra.update(extra_data)
 
 
 class ProductModel(CommonModel):

@@ -1,16 +1,18 @@
 from collections.abc import Mapping
 from typing import Annotated, List, Any
 
-from bson import ObjectId
 from fastapi import APIRouter, status, Depends, Path
 from pymongo.database import Database
 
 from dependencies.auth import get_current_user
 from dependencies.mongodb import MongoDBClient
 from dependencies.stripe_client import StripeClient, StripeClientInstance
+from src.database.mongodb.collection.address_collection import get_user_addresses_db, insert_address, \
+    delete_address, get_user_address_by_address_id, update_address_db
+from src.database.mongodb.schema.address_schema import AddressCollectionSchema
 from src.models.address import AddressModel
-from src.models.request.user import CartRequest, CartModelRequest, PaymentMethodCardRequest
-from src.models.responses.user import CartResponse, AddressResponse
+from src.models.request.user import CartRequest, CartModelRequest
+from src.models.responses.user import CartResponse
 from src.models.user import BaseUserModel
 from src.shared.exceptions import HttpException
 from src.shared.generics import ErrorResponse, Data, Error, MessageResponse
@@ -29,20 +31,14 @@ user_router.tags = ['User']
 def add_user_address(
         address: AddressModel,
         current_user: Annotated[BaseUserModel, Depends(get_current_user)],
-        mongo_client: Database[Mapping[str, Any]] = Depends(MongoDBClient()),
         stripe_client: StripeClient = Depends(StripeClientInstance())
 ):
     try:
-        address.userId = ObjectId(current_user.id)
+        addresses = get_user_addresses_db(user_id=current_user.id)
 
-        user_addresses_db = mongo_client.addresses.find(
-            {'user_id': ObjectId(current_user.id)})
-
-        user_addresses = [ad for ad in user_addresses_db]
-
-        if len(user_addresses) > 0:
+        if addresses:
             if address.default:
-                exists_default_address = filter(lambda ad: ad.default, user_addresses) is not None
+                exists_default_address = filter(lambda ad: ad.default, addresses) is not None
 
                 if exists_default_address:
                     raise HttpException(
@@ -53,7 +49,9 @@ def add_user_address(
         else:
             address.default = True
 
-        mongo_client.addresses.insert_one(address.to_schema())
+        address.userId = current_user.id
+
+        insert_address(AddressCollectionSchema(**address.to_schema()))
 
         if address.default:
             stripe_client.customers.update(
@@ -84,35 +82,23 @@ def add_user_address(
 
 
 @user_router.get('/addresses', responses={
-    status.HTTP_200_OK: {"model": Data[List[AddressResponse]], 'description': 'Addresses Found'},
+    status.HTTP_200_OK: {"model": Data[List[AddressModel]], 'description': 'Addresses Found'},
     status.HTTP_404_NOT_FOUND: {"model": Error[ErrorResponse], 'description': 'Addresses Not Found'},
 }, status_code=status.HTTP_200_OK)
 def get_user_addresses(
         current_user: Annotated[BaseUserModel, Depends(get_current_user)],
-        mongo_client: Database[Mapping[str, Any]] = Depends(MongoDBClient())
 ):
     try:
-        addresses_db = mongo_client.addresses.find({'user_id': ObjectId(current_user.id)})
+        addresses = get_user_addresses_db(user_id=current_user.id)
 
-        addresses = [AddressResponse(
-            id=str(address['_id']),
-            country=address['country'],
-            state=address['state'],
-            city=address['city'],
-            postalCode=address['postal_code'],
-            address=address['address'],
-            additionalAddress=address.get('additionalAddress'),
-            default=address['default']
-        ) for address in addresses_db]
-
-        if len(addresses) <= 0:
+        if not addresses:
             raise HttpException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 error_id=ErrorsIDs.NO_RECORDS_FOUND,
                 description=ErrorsDescriptions.NO_RECORDS_FOUND.value.format('addresses')
             )
 
-        return Data[List[AddressResponse]](
+        return Data[List[AddressModel]](
             data=addresses
         )
 
@@ -129,15 +115,12 @@ def get_user_addresses(
 def delete_user_address(
         current_user: Annotated[BaseUserModel, Depends(get_current_user)],
         address_id: str = Path(alias='addressId'),
-        mongo_client: Database[Mapping[str, Any]] = Depends(MongoDBClient()),
         stripe_client: StripeClient = Depends(StripeClientInstance())
 ):
     try:
+        address = get_user_address_by_address_id(address_id=address_id)
 
-        is_default_address = mongo_client.addresses.find_one(
-            {'user_id': ObjectId(current_user.id), 'default': True}) is not None
-
-        if is_default_address:
+        if address.default:
             stripe_client.customers.update(
                 customer=current_user.stripeId,
                 params=dict(
@@ -145,7 +128,7 @@ def delete_user_address(
                 )
             )
 
-        mongo_client.addresses.delete_one({"_id": ObjectId(address_id), 'user_id': ObjectId(current_user.id)})
+        delete_address(deleted_address_id=address_id)
 
         return Data[MessageResponse](
             data=MessageResponse(
@@ -167,35 +150,33 @@ def change_default_user_address(
         old: str,
         new: str,
         current_user: Annotated[BaseUserModel, Depends(get_current_user)],
-        mongo_client: Database[Mapping[str, Any]] = Depends(MongoDBClient()),
         stripe_client: StripeClient = Depends(StripeClientInstance())
 ):
     try:
-        mongo_client.addresses.update_one(
-            {"_id": ObjectId(old), 'user_id': ObjectId(current_user.id)},
-            {"$set": dict(
-                default=False
-            )}
-        )
+        old_default_address = get_user_address_by_address_id(address_id=old)
 
-        address = mongo_client.addresses.find_one_and_update(
-            {"_id": ObjectId(new), 'user_id': ObjectId(current_user.id)},
-            {"$set": dict(
-                default=True
-            )},
-            return_document=True
-        )
+        if old_default_address:
+            old_default_address.default = False
+            update_address_db(address_id=old_default_address.id,
+                              updated_address=AddressCollectionSchema(**old_default_address.to_schema()))
+
+        new_default_address = get_user_address_by_address_id(address_id=new)
+
+        if new_default_address:
+            new_default_address.default = True
+            update_address_db(address_id=new_default_address.id,
+                              updated_address=AddressCollectionSchema(**new_default_address.to_schema()))
 
         stripe_client.customers.update(
             customer=current_user.stripeId,
             params=dict(
                 address=dict(
-                    country=address['country'],
-                    state=address['state'],
-                    city=address['city'],
-                    postal_code=address['postal_code'],
-                    line1=address['address'],
-                    line2=address.get('additional_address')
+                    country=new_default_address.countryCode,
+                    state=new_default_address.state,
+                    city=new_default_address.city,
+                    postal_code=new_default_address.postalCode,
+                    line1=new_default_address.address,
+                    line2=new_default_address.additionalAddress
                 )
             )
         )

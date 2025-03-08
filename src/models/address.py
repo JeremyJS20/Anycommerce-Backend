@@ -3,10 +3,11 @@ from typing import Optional
 from pydantic import Field
 
 from src.shared.generics import CommonModel
+from src.utils.utils import ObjectIdTypeConverter
 
 
 class AddressModel(CommonModel):
-    id: Optional[str] = None
+    id: Optional[ObjectIdTypeConverter] = None
     userId: Optional[str] = None
     country: str = Field(min_length=1)
     countryCode: str = Field(min_length=1)
