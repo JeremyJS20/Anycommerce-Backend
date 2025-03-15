@@ -21,12 +21,8 @@ def camel_to_snake_case(input_dict):
             for key, value in d.items():
                 snake_case_key = ''.join(['_' + c.lower() if c.isupper() else c for c in key])
 
-                print('key 1-> ', snake_case_key)
-
                 if snake_case_key == "id":
                     snake_case_key = "_" + snake_case_key
-
-                print('key 2 -> ', snake_case_key)
 
                 snake_dict[snake_case_key] = convert_keys(value)
             return snake_dict

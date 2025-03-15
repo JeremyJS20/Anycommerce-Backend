@@ -2,7 +2,6 @@ import datetime
 import uuid
 from typing import Annotated, List, Mapping, Any, Union
 
-from bson import ObjectId
 from fastapi import APIRouter, Depends, Path
 from fastapi import status
 from pymongo.database import Database
@@ -23,13 +22,11 @@ from src.database.mongodb.schema.payment_intent_schema import PaymentIntentColle
 from src.database.mongodb.schema.product_schema import ProductCollectionSchema
 from src.env_variables.env import env_variables
 from src.models.payment_intent import PaymentIntentModel
-from src.models.product import ProductModel
 from src.models.request.order import OrderModel, OrderDatesModel, CustomerInfoOrderModel, ShippingInfoOrderModel, \
     BillingInfoOrderModel, ProductItemOrderModel, OrderSummaryModel
 from src.models.request.stripe_integration import CalculateTaxesRequest
-from src.models.responses.stripe_integration import SetupIntentResponse, PaymentMethodResponse, CalculateTaxesResponse, \
+from src.models.responses.stripe_integration import PaymentMethodResponse, CalculateTaxesResponse, \
     PlaceOrderRequest
-from src.models.responses.user import CartResponse
 from src.models.user import BaseUserModel
 from src.shared.exceptions import HttpException
 from src.shared.generics import Data, Error, ErrorResponse, MessageResponse, MessageWithStatusResponse

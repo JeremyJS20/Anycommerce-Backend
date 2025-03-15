@@ -9,10 +9,12 @@ from dependencies.mongodb import MongoDBClient
 from dependencies.stripe_client import StripeClient, StripeClientInstance
 from src.database.mongodb.collection.address_collection import get_user_addresses_db, insert_address, \
     delete_address, get_user_address_by_address_id, update_address_db
+from src.database.mongodb.collection.cart_collection import get_user_cart as get_user_cart_collection, \
+    create_user_cart as create_user_cart_collection, add_items_to_user_cart, delete_user_cart
 from src.database.mongodb.schema.address_schema import AddressCollectionSchema
+from src.database.mongodb.schema.cart_schema import CartCollectionSchema, CartContentCollectionSchema
 from src.models.address import AddressModel
-from src.models.request.user import CartRequest, CartModelRequest
-from src.models.responses.user import CartResponse
+from src.models.cart import CartContentModel, CartModel
 from src.models.user import BaseUserModel
 from src.shared.exceptions import HttpException
 from src.shared.generics import ErrorResponse, Data, Error, MessageResponse
@@ -194,7 +196,7 @@ def change_default_user_address(
 
 
 @user_router.get('/cart', responses={
-    status.HTTP_200_OK: {"model": Data[List[CartResponse]], 'description': 'Cart Found'},
+    status.HTTP_200_OK: {"model": Data[List[CartContentModel]], 'description': 'Cart Found'},
     status.HTTP_404_NOT_FOUND: {"model": Error[ErrorResponse], 'description': 'Cart Not Found'},
 }, status_code=status.HTTP_200_OK)
 def get_user_cart(
@@ -202,7 +204,7 @@ def get_user_cart(
         mongo_client: Database[Mapping[str, Any]] = Depends(MongoDBClient())
 ):
     try:
-        user_cart_db = mongo_client.cart.find_one({'user_id': current_user.id})
+        user_cart_db = get_user_cart_collection(user_id=current_user.id)
 
         if not user_cart_db:
             raise HttpException(
@@ -211,26 +213,21 @@ def get_user_cart(
                 description=ErrorsDescriptions.NO_RECORDS_FOUND.value.format('cart')
             )
 
-        for cart in user_cart_db['cart']:
-            cart['product']['cost'] = convert_currency(base_currency=cart['product']['currency'],
-                                                       target_currency=current_user.preferences.currency,
-                                                       amount=cart['product']['cost'], mongo_client=mongo_client)
-            cart['product']['currency'] = current_user.preferences.currency
+        for cart in user_cart_db.cart:
+            cart.product.cost = convert_currency(base_currency=cart.product.currency,
+                                                 target_currency=current_user.preferences.currency,
+                                                 amount=cart.product.cost, mongo_client=mongo_client)
+            cart.product.currency = current_user.preferences.currency
 
-            if cart['cart_info']['variants']:
-                for variant in cart['cart_info']['variants']:
-                    if variant['price']:
-                        variant['price'] = convert_currency(base_currency=cart['product']['currency'],
-                                                            target_currency=current_user.preferences.currency,
-                                                            amount=variant['price'], mongo_client=mongo_client)
+            if cart.cartInfo.variants:
+                for variant in cart.cartInfo.variants:
+                    if variant.price:
+                        variant.price = convert_currency(base_currency=cart.product.currency,
+                                                         target_currency=current_user.preferences.currency,
+                                                         amount=variant.price, mongo_client=mongo_client)
 
-        user_cart = [CartResponse(
-            product=cart['product'],
-            cartInfo=cart['cart_info']
-        ).to_json() for cart in user_cart_db['cart']]
-
-        return Data[List[CartResponse]](
-            data=user_cart
+        return Data[List[CartContentModel]](
+            data=user_cart_db.cart
         )
 
     except HttpException as ex:
@@ -245,12 +242,11 @@ def get_user_cart(
     status.HTTP_400_BAD_REQUEST: {"model": Data[MessageResponse], 'description': 'Cart created'}
 }, status_code=status.HTTP_201_CREATED)
 def create_user_cart(
-        cart: List[CartModelRequest],
+        cart: List[CartContentModel],
         current_user: Annotated[BaseUserModel, Depends(get_current_user)],
-        mongo_client: Database[Mapping[str, Any]] = Depends(MongoDBClient())
 ):
     try:
-        user_cart = mongo_client.cart.find_one({'user_id': current_user.id})
+        user_cart = get_user_cart_collection(user_id=current_user.id)
 
         if user_cart:
             raise HttpException(
@@ -259,10 +255,9 @@ def create_user_cart(
                 description=ErrorsDescriptions[ErrorsIDs.USER_ALREADY_HAVE_CART]
             )
 
-        mongo_client.cart.insert_one(CartRequest(
-            userId=current_user.id,
-            cart=cart
-        ).to_schema())
+        cart = CartModel(id=None, userId=current_user.id, cart=cart)
+
+        create_user_cart_collection(created_cart=CartCollectionSchema(**cart.to_schema()))
 
         return Data[MessageResponse](
             data=MessageResponse(
@@ -281,19 +276,18 @@ def create_user_cart(
     status.HTTP_200_OK: {"model": Data[MessageResponse], 'description': 'Cart updated'}
 }, status_code=status.HTTP_200_OK)
 def update_user_cart(
-        new_items: List[CartModelRequest],
+        new_items: List[CartContentModel],
         current_user: Annotated[BaseUserModel, Depends(get_current_user)],
-        mongo_client: Database[Mapping[str, Any]] = Depends(MongoDBClient())
 ):
-    def item_exists_in_cart(new_item, cart_items):
+    def item_exists_in_cart(new_item: CartContentModel, cart_items: List[CartContentModel]):
         for item in cart_items:
-            if item["product"]["id"] == new_item["product"]["id"]:
-                if item["cart_info"]["variants"] == new_item["cart_info"]["variants"]:
+            if item.product.id == new_item.product.id:
+                if item.cartInfo.variants == new_item.cartInfo.variants:
                     return True
         return False
 
     try:
-        user_cart = mongo_client.cart.find_one({'user_id': current_user.id})
+        user_cart = get_user_cart_collection(user_id=current_user.id)
 
         if not user_cart:
             raise HttpException(
@@ -303,13 +297,10 @@ def update_user_cart(
             )
 
         unique_new_cart_items = [
-            item.to_schema() for item in new_items if not item_exists_in_cart(item.to_schema(), user_cart['cart'])
+            CartContentCollectionSchema(**item.to_schema()) for item in new_items if not item_exists_in_cart(item, user_cart.cart)
         ]
 
-        mongo_client.cart.update_one(
-            {'user_id': current_user.id},
-            {"$addToSet": {"cart": {"$each": unique_new_cart_items}}}
-        )
+        add_items_to_user_cart(cart_id=user_cart.id, new_items=unique_new_cart_items)
 
         return Data[MessageResponse](
             data=MessageResponse(
@@ -329,10 +320,9 @@ def update_user_cart(
 }, status_code=status.HTTP_200_OK)
 def remove_user_cart(
         current_user: Annotated[BaseUserModel, Depends(get_current_user)],
-        mongo_client: Database[Mapping[str, Any]] = Depends(MongoDBClient())
 ):
     try:
-        user_cart = mongo_client.cart.find_one({'user_id': current_user.id})
+        user_cart = get_user_cart_collection(user_id=current_user.id)
 
         if not user_cart:
             raise HttpException(
@@ -341,7 +331,7 @@ def remove_user_cart(
                 description=ErrorsDescriptions.NO_RECORDS_FOUND.value.format('cart')
             )
 
-        mongo_client.cart.delete_one({'user_id': current_user.id})
+        delete_user_cart(user_id=current_user.id)
 
         return Data[MessageResponse](
             data=MessageResponse(
