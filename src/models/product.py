@@ -5,6 +5,7 @@ from pydantic import Field, Extra
 
 from src.models.common import MediaModel, CommonType
 from src.shared.generics import CommonModel
+from src.utils.utils import ObjectIdTypeConverter
 
 
 class AttributeType(CommonModel):
@@ -34,7 +35,7 @@ class ProductVariants(CommonModel):
 
 
 class ProductModel(CommonModel):
-    id: Optional[str] = None
+    id: Optional[ObjectIdTypeConverter] = None
     storeId: Optional[str] = None
     name: str = Field(min_length=1)
     cost: float = Field(gt=0)

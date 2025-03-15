@@ -13,10 +13,14 @@ from dependencies.auth import get_current_user
 from dependencies.mongodb import MongoDBClient
 from dependencies.stripe_client import StripeClientInstance
 from src.database.mongodb.collection.address_collection import get_user_address_by_address_id
-from src.database.mongodb.collection.cart_collection import get_user_cart
+from src.database.mongodb.collection.cart_collection import get_user_cart, delete_user_cart
+from src.database.mongodb.collection.order_collection import insert_order
 from src.database.mongodb.collection.payment_intent_collection import get_user_payment_intent_by_status, \
     update_payment_intent, insert_payment_intent, get_user_payment_intent_by_setup_id, delete_payment_intent
+from src.database.mongodb.collection.product_collection import get_product_by_id, update_product
+from src.database.mongodb.schema.order_schema import OrderCollectionSchema
 from src.database.mongodb.schema.payment_intent_schema import PaymentIntentCollectionSchema
+from src.database.mongodb.schema.product_schema import ProductCollectionSchema
 from src.env_variables.env import env_variables
 from src.models.payment_intent import PaymentIntentModel
 from src.models.product import ProductModel
@@ -295,11 +299,12 @@ def place_order(
         mongo_client: Database[Mapping[str, Any]] = Depends(MongoDBClient()),
         stripe_client: StripeClient = Depends(StripeClientInstance())
 ):
+    payment_intent = get_user_payment_intent_by_status(user_id=current_user.id,
+                                                       status=PaymentIntentStatus.INITIATED)
+    amount_to_pay_in_cents = 0
     try:
         cart = get_user_cart(user_id=current_user.id)
         address = get_user_address_by_address_id(address_id=place_order_request.shippingAddress)
-        payment_intent = get_user_payment_intent_by_status(user_id=current_user.id,
-                                                           status=PaymentIntentStatus.INITIATED)
 
         orders: List[OrderModel] = []
 
@@ -340,6 +345,7 @@ def place_order(
                                               variant.price])) * product.cartInfo.amount)
 
                 existent_store_order = OrderModel(
+                    id=None,
                     storeId=product.product.storeId,
                     dates=OrderDatesModel(
                         order=datetime.datetime.now()
@@ -448,23 +454,21 @@ def place_order(
         payment_intent.status = PaymentIntentStatus.SUCCESSFUL.value
         payment_intent.endDate = datetime.datetime.now()
 
-        update_payment_intent(payment_intent_id=payment_intent.id, updated_payment_intent=PaymentIntentCollectionSchema(**payment_intent.to_schema()))
-
-        mongo_client.orders.insert_many([order.to_schema() for order in orders])
+        update_payment_intent(payment_intent_id=payment_intent.id,
+                              updated_payment_intent=PaymentIntentCollectionSchema(**payment_intent.to_schema()))
 
         for order in orders:
+            insert_order(inserted_order=OrderCollectionSchema(**order.to_schema()))
+
             for product in order.items:
-                product_db = mongo_client.product.find_one({'_id': ObjectId(product.id)})
+                existent_product = get_product_by_id(product_id=product.id)
 
-                if product_db:
-                    mongo_client.product.update_one(
-                        {"_id": ObjectId(product.id)},
-                        {"$set": dict(
-                            stock=product_db['stock'] - product.quantity
-                        )}
-                    )
+                if existent_product:
+                    existent_product.stock = existent_product.stock - product.quantity
+                    update_product(product_id=product.id,
+                                   updated_product=ProductCollectionSchema(**existent_product.to_schema()))
 
-        mongo_client.cart.delete_one({'user_id': current_user.id})
+        delete_user_cart(user_id=current_user.id)
 
         return Data[MessageResponse](
             data=MessageResponse(message='testing')
@@ -474,21 +478,20 @@ def place_order(
         raise ex
 
     except CardError as ex:
-        payment_intent = stripe_client.payment_intents.create(
+        payment_intent_stripe = stripe_client.payment_intents.create(
             params=PaymentIntentService.CreateParams(
                 payment_method_types=['card'],
                 customer=current_user.stripeId,
-                amount=1,
+                amount=amount_to_pay_in_cents,
                 currency=current_user.preferences.currency
             )
         )
 
-        mongo_client.payment_intent.update_one(
-            {'user_id': current_user.id, 'status': PaymentIntentStatus.INITIATED.value},
-            {"$set": dict(
-                payment_intent_id=payment_intent.id
-            )}
-        )
+        payment_intent.status = PaymentIntentStatus.INITIATED.value
+        payment_intent.paymentIntentId = payment_intent_stripe.id
+
+        update_payment_intent(payment_intent_id=payment_intent.id,
+                              updated_payment_intent=PaymentIntentCollectionSchema(**payment_intent.to_schema()))
 
         error_id = StripeErrorsIDs.__dict__.get(
             ex.error.decline_code.upper() if ex.error.decline_code else ex.error.code.upper())

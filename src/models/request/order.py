@@ -8,6 +8,7 @@ from src.models.common import MediaModel
 from src.models.product import ProductVariants, AttributeType
 from src.shared.generics import CommonModel
 from src.utils.constants import OrderStatus
+from src.utils.utils import ObjectIdTypeConverter
 
 
 class OrderDatesModel(CommonModel):
@@ -60,6 +61,7 @@ class BillingInfoOrderModel(CommonModel):
 
 
 class OrderModel(CommonModel):
+    id: Optional[ObjectIdTypeConverter]
     storeId: str
     status: str = Field(min_length=1, default=OrderStatus.ORDER_PLACED.value)
     dates: OrderDatesModel
