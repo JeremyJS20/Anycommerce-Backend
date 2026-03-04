@@ -8,7 +8,7 @@
 
 ## 2. Technology Stack
 *   **Backend:**
-    *   **Language:** Python 3.13+
+    *   **Language:** Python 3.12+
     *   **Framework:** FastAPI 0.110+
     *   **Database:** MongoDB exclusively (using `PyMongo`).
     *   **Key Libs:** `pydantic`, `stripe`, `python-jose` (JWT), `passlib`, `uvicorn`.
