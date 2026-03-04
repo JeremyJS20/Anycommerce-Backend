@@ -12,6 +12,7 @@ class EnvVariables(BaseSettings):
     countries_api_url: str
     countries_api_key: str
     currency_convertion_api_url: str
+    app_api_key: str
 
     model_config = SettingsConfigDict(env_file=".env", extra="allow")
 

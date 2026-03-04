@@ -98,13 +98,26 @@ def convert_currency_2(target_convertion_rate: float, amount: float):
 
 class ObjectIdTypeConverter(str):
     @classmethod
-    def validate(cls, value, field=None):
-        try:
-            BaseObjectId(str(value))
-            return str(value)
-        except InvalidId as e:
-            raise ValueError("Not a valid ObjectId") from e
+    def __get_pydantic_core_schema__(
+            cls, source_type: Any, handler: Any
+    ) -> Any:
+        from pydantic_core import core_schema
+        return core_schema.no_info_after_validator_function(
+            cls.validate,
+            core_schema.any_schema()
+        )
 
     @classmethod
-    def __get_validators__(cls):
-        yield cls.validate
+    def validate(cls, value: Any) -> str:
+        if isinstance(value, BaseObjectId):
+            return str(value)
+        if isinstance(value, str) and BaseObjectId.is_valid(value):
+            return value
+        raise ValueError("Not a valid ObjectId")
+
+    @classmethod
+    def __get_pydantic_json_schema__(
+            cls, core_schema: Any, handler: Any
+    ) -> Any:
+        # For JSON schema, we want this to be represented as a string
+        return handler.resolve_ref_schema(handler(core_schema)) | {'type': 'string'}

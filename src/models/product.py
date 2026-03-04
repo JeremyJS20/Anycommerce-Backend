@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional, Any, List
 
-from pydantic import Field, Extra
+from pydantic import Field, ConfigDict
 
 from src.models.common import MediaModel, CommonType
 from src.shared.generics import CommonModel
@@ -29,9 +29,7 @@ class ProductDates(CommonModel):
 class ProductVariants(CommonModel):
     colors: Optional[List[AttributeType]] = None
     sizes: Optional[List[AttributeType]] = None
-    model_config = {
-        "extra": Extra.allow
-    }
+    model_config = ConfigDict(extra='allow')
 
 
 class ProductModel(CommonModel):
@@ -49,7 +47,7 @@ class ProductModel(CommonModel):
     details: ProductDetails
     variants: ProductVariants
 
-    model_config = dict(
+    model_config = ConfigDict(
         json_schema_extra=dict(
             example=dict(
                 storeId="662e9cdce7bd223fe6b10aa8",

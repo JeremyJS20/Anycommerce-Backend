@@ -5,10 +5,7 @@ from pymongo.database import Database
 
 from dependencies.mongodb import MongoDBClient
 from src.database.mongodb.schema.convertion_rates_schema import ConvertionRatesCollectionSchema
-from src.database.mongodb.schema.user_preferences_schema import UserPreferencesCollectionSchema
-from src.database.mongodb.schema.user_schema import UserCollectionSchema
 from src.models.currency_api import CurrencyConvertionRatesModel
-from src.models.user import UserModel, UserPreferencesModel
 from src.utils.utils import snake_to_camel_case
 
 mongo_client: Database[Mapping[str, Any] | Any] = MongoDBClient()()

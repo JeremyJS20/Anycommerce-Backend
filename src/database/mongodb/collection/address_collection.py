@@ -7,10 +7,7 @@ from pymongo.results import UpdateResult, DeleteResult
 
 from dependencies.mongodb import MongoDBClient
 from src.database.mongodb.schema.address_schema import AddressCollectionSchema
-from src.database.mongodb.schema.payment_intent_schema import PaymentIntentCollectionSchema
 from src.models.address import AddressModel
-from src.models.payment_intent import PaymentIntentModel
-from src.utils.constants import PaymentIntentStatus
 from src.utils.utils import snake_to_camel_case
 
 mongo_client: Database[Mapping[str, Any] | Any] = MongoDBClient()()

@@ -1,0 +1,9 @@
+# System Instructions
+ALWAYS enforce the rules defined in `project_context.md` for every request.
+This file contains the mandatory:
+- Technology Stack (FastAPI & MongoDB)
+- Architecture Patterns (Routers, Models, Collections)
+- Security Guidelines (JWT, API Keys, Stripe)
+- Standardized Response Formats
+
+Before writing any code, cross-reference your plan with `project_context.md` to ensure compliance.

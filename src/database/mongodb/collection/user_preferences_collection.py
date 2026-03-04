@@ -1,4 +1,5 @@
 from typing import Optional, Mapping, Any
+from bson import ObjectId
 
 from pymongo.collection import Collection
 from pymongo.database import Database
@@ -21,5 +22,19 @@ def get_user_preferences_by_id(user_id: str) -> Optional[UserPreferencesModel]:
             return None
 
         return UserPreferencesModel(**snake_to_camel_case(user_preferences_schema)['preferences'])
+    except Exception as e:
+        raise e
+
+
+def insert_user_preferences(preferences: UserPreferencesCollectionSchema) -> Optional[str]:
+    try:
+        preferences['_id'] = ObjectId()
+
+        inserted_id = collection.insert_one(preferences).inserted_id
+
+        if not inserted_id:
+            return None
+
+        return str(inserted_id)
     except Exception as e:
         raise e

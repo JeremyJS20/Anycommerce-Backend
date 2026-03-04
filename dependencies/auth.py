@@ -87,7 +87,7 @@ def validate_api_key(
     if not api_key:
         raise AuthException(error_id=ErrorsIDs.UNAUTHORIZED, description=ErrorsDescriptions.UNAUTHORIZED)
 
-    api_key_db = mongo_client.api_key.find_one({'value': api_key})
+    api_key_db = env_variables.app_api_key
 
     if not api_key_db:
         raise AuthException(error_id=ErrorsIDs.API_KEY_NOT_VALID, description=ErrorsDescriptions.API_KEY_NOT_VALID)

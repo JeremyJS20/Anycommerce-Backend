@@ -11,6 +11,7 @@ from dependencies.auth import get_current_user, validate_api_key
 from src.database.mongodb.collection.session_token_collection import insert_session_token, \
     get_session_token, update_session_token_with_id, remove_session_token, remove_many_sessions_token
 from src.database.mongodb.collection.user_collection import get_user_by_email, insert_user
+from src.database.mongodb.collection.user_preferences_collection import insert_user_preferences
 from src.database.mongodb.schema.session_token_schema import SessionTokenCollectionSchema
 from src.env_variables.env import env_variables
 from src.models.request.user import UserRequest
@@ -48,7 +49,18 @@ def create_new_user(
         new_user.password = pwd_context.hash(new_user.password)
         new_user.stripeId = new_stripe_user.id
 
-        insert_user(new_user.to_schema())
+        user_id = insert_user(new_user.to_schema())
+
+        if user_id:
+            insert_user_preferences(preferences={
+                "user_id": user_id,
+                "preferences": {
+                    "locale": "en",
+                    "country": "US",
+                    "currency": "USD",
+                    "theme": "light"
+                }
+            })
 
         return Data[MessageResponse](data=MessageResponse(message=ResponseDescriptions.USER_CREATED_SUCCESS))
 
