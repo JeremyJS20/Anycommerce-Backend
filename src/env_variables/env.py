@@ -7,6 +7,7 @@ class EnvVariables(BaseSettings):
     mongodb_connection_string: str
     mongodb_database: str
     auth_secret_key: str
+    auth_algorithm: str
     origins: str
     stripe_secret_key: str
     countries_api_url: str
