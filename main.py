@@ -29,9 +29,7 @@ app = FastAPI(responses={
 app.version = '1.0.0'
 app.title = 'AnyCommerce API'
 
-origins = [
-    env_variables.origin
-]
+origins = env_variables.origins_list
 
 app.add_middleware(
     CORSMiddleware,
