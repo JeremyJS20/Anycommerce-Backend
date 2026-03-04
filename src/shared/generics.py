@@ -14,7 +14,7 @@ class CommonModel(BaseModel):
         return self.model_dump(mode='json')
 
     def to_schema(self) -> dict:
-        return camel_to_snake_case(self.model_dump())
+        return camel_to_snake_case(self.model_dump(exclude_none=True))
 
 
 class CommonResponseModel(BaseModel):

@@ -10,7 +10,7 @@ from src.utils.utils import camel_to_snake_case, ObjectIdTypeConverter
 
 class CommonMethodsModel:
     def to_schema(self: BaseModel) -> dict:
-        return camel_to_snake_case(self.model_dump())
+        return camel_to_snake_case(self.model_dump(exclude_none=True))
 
 
 class UserModel(CommonModel):
