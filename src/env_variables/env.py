@@ -2,8 +2,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class EnvVariables(BaseSettings):
-    port: str
-    host: str
+    port: str = "10000"
+    host: str = "0.0.0.0"
     mongodb_connection_string: str
     mongodb_database: str
     auth_secret_key: str
