@@ -12,7 +12,8 @@ class ProductsResponse(CommonResponseModel):
     cost: float
     currency: str
     stock: int
-    category: str
+    categoryId: str
+    categoryName: str
     subcategory: str
     rating: Optional[float] = None
     imgs: Optional[List[MediaModel]] = None
@@ -25,7 +26,8 @@ class ProductResponse(CommonResponseModel):
     cost: float
     currency: str
     stock: int
-    category: str
+    categoryId: str
+    categoryName: str
     subcategory: str
     rating: Optional[float] = None
     imgs: Optional[List[MediaModel]] = None

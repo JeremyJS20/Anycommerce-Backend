@@ -31,7 +31,8 @@ class ProductCollectionSchema(TypedDict):
     cost: float
     currency: str
     stock: int
-    category: str
+    category_id: str
+    category_name: str
     subcategory: str
     rating: Optional[float]
     imgs: Optional[List[MediaSchema]]

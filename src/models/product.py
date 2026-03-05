@@ -39,7 +39,8 @@ class ProductModel(CommonModel):
     cost: float = Field(gt=0)
     currency: str = Field(min_length=1)
     stock: int = Field(gt=0)
-    category: str = Field(min_length=1)
+    categoryId: str = Field(min_length=1)
+    categoryName: str = Field(min_length=1)
     subcategory: str = Field(min_length=1)
     rating: Optional[float] = None
     imgs: Optional[List[MediaModel]] = Field(default=[MediaModel().to_json()])
@@ -55,7 +56,8 @@ class ProductModel(CommonModel):
                 cost=1100,
                 currency="USD",
                 stock=10,
-                category="Electronics",
+                categoryId="662e9cdce7bd223fe6b10aa8",
+                categoryName="Electronics",
                 subcategory="Laptops",
                 dates=dict(
                     creation=datetime.now(),
@@ -103,7 +105,8 @@ class ProductModel(CommonModel):
             cost=product['cost'],
             currency=product['currency'],
             stock=product['stock'],
-            category=product['category'],
+            categoryId=str(product.get('category_id') or product.get('categoryId')),
+            categoryName=product.get('category_name') or product.get('categoryName'),
             subcategory=product['subcategory'],
             dates=product['dates'],
             details=product['details'],

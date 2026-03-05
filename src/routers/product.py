@@ -62,7 +62,7 @@ def get_products(
         price_min: Union[int, None] = Query(default=None, alias='priceMin'),
         price_max: Union[int, None] = Query(default=None, alias='priceMax'),
         rating: Union[int, None] = None,
-        category: Union[str, None] = None,
+        category_id: Union[str, None] = Query(default=None, alias='category'),
         subcategory: Union[str, None] = None,
         sort: Union[str, None] = None,
         index: int = Query(default=1, gt=0),
@@ -79,22 +79,14 @@ def get_products(
 
             queries.append({"$or": search_patterns})
 
-            # pattern = "|".join(search.split(sep=' '))
-            # regex_pattern = re.compile(pattern, re.IGNORECASE)
-            # query['name'] = {"$regex": regex_pattern}
-
-        # if price_min and price_max:
-        #     price_pattern = [{'cost': {'$gte': price_min}}, {'cost': {'$lte': price_max}}]
-        #
-        #     queries.append({"$and": price_pattern})
 
         if rating:
             rating_pattern = [{'rating': {'$gte': rating}}]
 
             queries.append({"$and": rating_pattern})
 
-        if category:
-            category_pattern = [{'category': {'$eq': category}}]
+        if category_id:
+            category_pattern = [{'category_id': {'$eq': category_id}}]
 
             queries.append({"$and": category_pattern})
 
@@ -108,11 +100,9 @@ def get_products(
         offset = (index - 1) * Params.RECORDS_LIMIT
 
         if len(queries) > 0:
-            offset = 0
-            index = 1
+            pass # Keep index as requested
 
-        products_db = None
-        total_products = None
+        products_db = mongo_client.product.find(query)
 
         if sort:
             sort_conditions = []
@@ -127,21 +117,16 @@ def get_products(
                 case 'alphabeticallyDesc':
                     sort_conditions.append(('name', -1))
                 case 'dateAsc':
-                    sort_conditions.append(('date.creation', 1))
-                case 'dateDesc':
-                    sort_conditions.append(('date.creation', -1))
+                    sort_conditions.append(('dates.creation', 1))
+                case 'dateDesc' | 'newest':
+                    sort_conditions.append(('dates.creation', -1))
+                case 'ratingDesc':
+                    sort_conditions.append(('rating', -1))
 
             if sort_conditions:
-                products_db = mongo_client.product.find(query).skip(offset).limit(Params.RECORDS_LIMIT).sort(
-                    sort_conditions)
-            else:
-                products_db = mongo_client.product.find(query).skip(offset).limit(Params.RECORDS_LIMIT)
+                products_db = products_db.sort(sort_conditions)
 
-            total_products = mongo_client.product.count_documents(query)
-        else:
-            products_db = mongo_client.product.find(query).skip(offset).limit(Params.RECORDS_LIMIT)
-            total_products = mongo_client.product.count_documents(query)
-
+        # Convert and map products
         products = [ProductResponse(
             id=str(product['_id']),
             storeId=str(product['store_id']),
@@ -154,7 +139,8 @@ def get_products(
                                   ),
             currency=current_user.preferences.currency if current_user else product['currency'],
             stock=product['stock'],
-            category=product['category'],
+            categoryId=str(product.get('category_id') or product.get('categoryId')),
+            categoryName=product.get('category_name') or product.get('categoryName'),
             subcategory=product['subcategory'],
             rating=product.get('rating'),
             imgs=product.get('imgs'),
@@ -163,17 +149,27 @@ def get_products(
             variants=product.get('variants')
         ).to_json() for product in products_db]
 
-        if price_min and price_max:
-            products = list(filter(lambda product: price_min <= product['cost'] <= price_max, products))
+        # Apply price filtering on converted costs
+        if price_min is not None:
+            products = [p for p in products if p['cost'] >= price_min]
 
-        if len(products) <= 0:
+        if price_max is not None:
+            products = [p for p in products if p['cost'] <= price_max]
+
+        total_products = len(products)
+
+        if total_products <= 0:
             raise HttpException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 error_id=ErrorsIDs.NO_RECORDS_FOUND,
                 description=ErrorsDescriptions.NO_RECORDS_FOUND.value.format('products')
             )
 
-        total_page_records = len(products)
+        # Apply pagination in-memory
+        offset = (index - 1) * Params.RECORDS_LIMIT
+        paginated_products = products[offset:offset + Params.RECORDS_LIMIT]
+
+        total_page_records = len(paginated_products)
 
         def calculate_total_pages():
             if total_products % Params.RECORDS_LIMIT == 0:
@@ -182,7 +178,7 @@ def get_products(
             return int(total_products / Params.RECORDS_LIMIT) + 1
 
         return DataWithAdditional[List[ProductResponse], PaginationData](
-            data=products,
+            data=paginated_products,
             additionalData=PaginationData(
                 currentPage=index,
                 totalPageRecords=total_page_records,
@@ -258,7 +254,8 @@ def get_product_by_id(
                                   ),
             currency=current_user.preferences.currency if current_user else product['currency'],
             stock=product['stock'],
-            category=product['category'],
+            categoryId=str(product.get('category_id') or product.get('categoryId')),
+            categoryName=product.get('category_name') or product.get('categoryName'),
             subcategory=product['subcategory'],
             rating=product.get('rating'),
             imgs=product.get('imgs'),
