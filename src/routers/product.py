@@ -108,7 +108,7 @@ def get_products(
         offset = (index - 1) * Params.RECORDS_LIMIT
 
         if len(queries) > 0:
-            offset = 1
+            offset = 0
             index = 1
 
         products_db = None
@@ -131,8 +131,12 @@ def get_products(
                 case 'dateDesc':
                     sort_conditions.append(('date.creation', -1))
 
-            products_db = mongo_client.product.find(query).skip(offset).limit(Params.RECORDS_LIMIT).sort(
-                sort_conditions)
+            if sort_conditions:
+                products_db = mongo_client.product.find(query).skip(offset).limit(Params.RECORDS_LIMIT).sort(
+                    sort_conditions)
+            else:
+                products_db = mongo_client.product.find(query).skip(offset).limit(Params.RECORDS_LIMIT)
+
             total_products = mongo_client.product.count_documents(query)
         else:
             products_db = mongo_client.product.find(query).skip(offset).limit(Params.RECORDS_LIMIT)
