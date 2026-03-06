@@ -10,7 +10,7 @@ from dependencies.stripe_client import StripeClient, StripeClientInstance
 from src.database.mongodb.collection.address_collection import get_user_addresses_db, insert_address, \
     delete_address, get_user_address_by_address_id, update_address_db
 from src.database.mongodb.collection.cart_collection import get_user_cart as get_user_cart_collection, \
-    create_user_cart as create_user_cart_collection, add_items_to_user_cart, delete_user_cart
+    create_user_cart as create_user_cart_collection, add_items_to_user_cart, delete_user_cart, update_user_cart as update_user_cart_db
 from src.database.mongodb.schema.address_schema import AddressCollectionSchema
 from src.database.mongodb.schema.cart_schema import CartCollectionSchema, CartContentCollectionSchema
 from src.models.address import AddressModel
@@ -279,13 +279,6 @@ def update_user_cart(
         new_items: List[CartContentModel],
         current_user: Annotated[BaseUserModel, Depends(get_current_user)],
 ):
-    def item_exists_in_cart(new_item: CartContentModel, cart_items: List[CartContentModel]):
-        for item in cart_items:
-            if item.product.id == new_item.product.id:
-                if item.cartInfo.variants == new_item.cartInfo.variants:
-                    return True
-        return False
-
     try:
         user_cart = get_user_cart_collection(user_id=current_user.id)
 
@@ -296,11 +289,22 @@ def update_user_cart(
                 description=ErrorsDescriptions.NO_RECORDS_FOUND.value.format('cart')
             )
 
-        unique_new_cart_items = [
-            CartContentCollectionSchema(**item.to_schema()) for item in new_items if not item_exists_in_cart(item, user_cart.cart)
-        ]
+        current_cart_items = user_cart.cart
 
-        add_items_to_user_cart(cart_id=user_cart.id, new_items=unique_new_cart_items)
+        for new_item in new_items:
+            found = False
+            for existing_item in current_cart_items:
+                if existing_item.product.id == new_item.product.id:
+                    if existing_item.cartInfo.variants == new_item.cartInfo.variants:
+                        existing_item.cartInfo.amount = new_item.cartInfo.amount
+                        found = True
+                        break
+            if not found:
+                current_cart_items.append(new_item)
+
+        user_cart.cart = current_cart_items
+
+        update_user_cart_db(cart_id=user_cart.id, updated_cart=CartCollectionSchema(**user_cart.to_schema()))
 
         return Data[MessageResponse](
             data=MessageResponse(
