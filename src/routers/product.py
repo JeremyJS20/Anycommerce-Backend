@@ -64,6 +64,7 @@ def get_products(
         rating: Union[int, None] = None,
         category_id: Union[str, None] = Query(default=None, alias='category'),
         subcategory: Union[str, None] = None,
+        store_id: Union[str, None] = Query(default=None, alias='storeId'),
         sort: Union[str, None] = None,
         index: int = Query(default=1, gt=0),
         limit: int = Query(default=Params.RECORDS_LIMIT, gt=0),
@@ -95,6 +96,11 @@ def get_products(
             subcategory_pattern = [{'subcategory': {'$eq': subcategory}}]
 
             queries.append({"$and": subcategory_pattern})
+
+        if store_id:
+            store_pattern = [{'store_id': {'$eq': store_id}}]
+
+            queries.append({"$and": store_pattern})
 
         query = {"$and": queries} if len(queries) > 0 else {}
         offset = (index - 1) * limit
