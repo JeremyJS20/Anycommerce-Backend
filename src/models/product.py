@@ -47,6 +47,7 @@ class ProductModel(CommonModel):
     dates: ProductDates
     details: ProductDetails
     variants: ProductVariants
+    features: Optional[List[CommonType]] = None
 
     model_config = ConfigDict(
         json_schema_extra=dict(
@@ -91,6 +92,14 @@ class ProductModel(CommonModel):
                         extension=".jpeg",
                         url="https://picsum.photos/id/96/200/300"
                     )
+                ],
+                features=[
+                    dict(
+                        key="warranty",
+                        text="1 Year Warranty",
+                        value=1,
+                        description="One year of limited factory warranty."
+                    )
                 ]
             )
         )
@@ -113,4 +122,5 @@ class ProductModel(CommonModel):
             variants=product['variants'],
             rating=product.get('rating'),
             imgs=product.get('imgs'),
+            features=product.get('features')
         )

@@ -39,3 +39,4 @@ class ProductCollectionSchema(TypedDict):
     dates: ProductDatesSchema
     details: ProductDetailsSchema
     variants: ProductVariantsSchema
+    features: Optional[List[CommonTypeSchema]]

@@ -150,7 +150,8 @@ def get_products(
             imgs=product.get('imgs'),
             dates=product['dates'],
             details=product['details'],
-            variants=product.get('variants')
+            variants=product.get('variants'),
+            features=product.get('features')
         ).to_json() for product in products_db]
 
         # Apply price filtering on converted costs
@@ -264,6 +265,7 @@ def get_product_by_id(
             dates=product['dates'],
             details=product['details'],
             variants=product.get('variants'),
+            features=product.get('features'),
             reviews=product_reviews
         )
 

@@ -1,6 +1,6 @@
 from typing import Optional, List
 
-from src.models.common import MediaModel
+from src.models.common import MediaModel, CommonType
 from src.models.product import ProductDetails, ProductVariants, ProductDates
 from src.models.responses.review import ReviewResponse
 from src.shared.generics import CommonResponseModel
@@ -17,6 +17,7 @@ class ProductsResponse(CommonResponseModel):
     subcategory: str
     rating: Optional[float] = None
     imgs: Optional[List[MediaModel]] = None
+    features: Optional[List[CommonType]] = None
 
 
 class ProductResponse(CommonResponseModel):
@@ -34,6 +35,7 @@ class ProductResponse(CommonResponseModel):
     dates: ProductDates
     details: ProductDetails
     variants: Optional[ProductVariants] = None
+    features: Optional[List[CommonType]] = None
     reviews: Optional[List[ReviewResponse]] = None
 
 
