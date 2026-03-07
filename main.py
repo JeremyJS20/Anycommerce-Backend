@@ -18,6 +18,7 @@ from src.routers.auth import auth_router
 from src.routers.product import product_router
 from src.routers.user import user_router
 from src.routers.stripe_router import stripe_router
+from src.routers.store import store_router
 
 # logging.basicConfig(level=logging.DEBUG)
 
@@ -44,6 +45,7 @@ app.include_router(user_router, prefix='/user')
 app.include_router(product_router, prefix='/products')
 app.include_router(stripe_router, prefix='/stripe')
 app.include_router(catalogs_router, prefix='/catalogs')
+app.include_router(store_router)
 app.include_router(cron_router, include_in_schema=False)
 
 app.add_exception_handler(HttpException, http_response_exception_handler)
