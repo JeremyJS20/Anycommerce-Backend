@@ -3,7 +3,7 @@ from typing import Optional, Any, List
 
 from pydantic import Field, ConfigDict
 
-from src.models.common import MediaModel, CommonType
+from src.models.common import MediaModel, CommonType, FeatureModel
 from src.shared.generics import CommonModel
 from src.utils.utils import ObjectIdTypeConverter
 
@@ -47,7 +47,7 @@ class ProductModel(CommonModel):
     dates: ProductDates
     details: ProductDetails
     variants: ProductVariants
-    features: Optional[List[CommonType]] = None
+    features: Optional[List[FeatureModel]] = None
 
     model_config = ConfigDict(
         json_schema_extra=dict(
@@ -96,9 +96,9 @@ class ProductModel(CommonModel):
                 features=[
                     dict(
                         key="warranty",
-                        text="1 Year Warranty",
-                        value=1,
-                        description="One year of limited factory warranty."
+                        label="1 Year Warranty",
+                        icon="shield-check",
+                        details="One year of limited factory warranty."
                     )
                 ]
             )

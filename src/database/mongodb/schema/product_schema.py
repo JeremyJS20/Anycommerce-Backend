@@ -3,7 +3,7 @@ from typing import TypedDict, List, Optional, NotRequired
 
 from bson import ObjectId
 
-from src.database.mongodb.schema.common_schemas import AttributeTypeSchema, CommonTypeSchema, MediaSchema
+from src.database.mongodb.schema.common_schemas import AttributeTypeSchema, CommonTypeSchema, MediaSchema, FeatureSchema
 
 
 class ProductDetailsSchema(TypedDict):
@@ -39,4 +39,4 @@ class ProductCollectionSchema(TypedDict):
     dates: ProductDatesSchema
     details: ProductDetailsSchema
     variants: ProductVariantsSchema
-    features: Optional[List[CommonTypeSchema]]
+    features: Optional[List[FeatureSchema]]

@@ -6,6 +6,7 @@ class CommonTypeSchema(TypedDict):
     text: str
     value: Any
     description: Optional[str]
+    icon: Optional[str]
 
 
 class MediaSchema(TypedDict):
@@ -21,3 +22,10 @@ class AttributeTypeSchema(TypedDict):
     price: Optional[int]
     available: bool
     default: bool
+
+
+class FeatureSchema(TypedDict):
+    key: str
+    label: str
+    icon: str
+    details: str

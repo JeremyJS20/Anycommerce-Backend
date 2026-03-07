@@ -1,5 +1,6 @@
 from typing import TypedDict, List, Optional, NotRequired
 from bson import ObjectId
+from src.database.mongodb.schema.common_schemas import FeatureSchema
 
 class StoreMetricsSchema(TypedDict):
     rating: float
@@ -12,11 +13,6 @@ class StoreVerificationSchema(TypedDict):
     badge_type: str
     trust_score: int
 
-class StoreFeatureSchema(TypedDict):
-    key: str
-    label: str
-    icon: str
-    details: str
 
 class StoreSocialLinksSchema(TypedDict):
     instagram: Optional[str]
@@ -43,7 +39,7 @@ class StoreCollectionSchema(TypedDict):
     cover_image_url: str
     metrics: StoreMetricsSchema
     verification: StoreVerificationSchema
-    features: List[StoreFeatureSchema]
+    features: List[FeatureSchema]
     social_links: StoreSocialLinksSchema
     contact: StoreContactSchema
     settings: StoreSettingsSchema

@@ -1,6 +1,7 @@
 from typing import Optional, List
 from pydantic import Field, ConfigDict
 from src.shared.generics import CommonModel
+from src.models.common import FeatureModel
 from src.utils.utils import ObjectIdTypeConverter
 
 class StoreMetrics(CommonModel):
@@ -14,11 +15,6 @@ class StoreVerification(CommonModel):
     badge_type: str = Field(alias="badgeType")
     trust_score: int = Field(alias="trustScore")
 
-class StoreFeature(CommonModel):
-    key: str
-    label: str
-    icon: str
-    details: str
 
 class StoreSocialLinks(CommonModel):
     instagram: Optional[str] = None
@@ -45,7 +41,7 @@ class StoreModel(CommonModel):
     cover_image_url: str = Field(alias="coverImageUrl")
     metrics: StoreMetrics
     verification: StoreVerification
-    features: List[StoreFeature]
+    features: List[FeatureModel]
     social_links: StoreSocialLinks = Field(alias="socialLinks")
     contact: StoreContact
     settings: StoreSettings
