@@ -66,6 +66,7 @@ def get_products(
         subcategory: Union[str, None] = None,
         sort: Union[str, None] = None,
         index: int = Query(default=1, gt=0),
+        limit: int = Query(default=Params.RECORDS_LIMIT, gt=0),
         mongo_client: Database[Mapping[str, Any]] = Depends(MongoDBClient())
 ):
     try:
@@ -96,13 +97,11 @@ def get_products(
             queries.append({"$and": subcategory_pattern})
 
         query = {"$and": queries} if len(queries) > 0 else {}
-
-        offset = (index - 1) * Params.RECORDS_LIMIT
+        offset = (index - 1) * limit
 
         if len(queries) > 0:
             pass # Keep index as requested
 
-        products_db = mongo_client.product.find(query)
 
         if sort:
             sort_conditions = []
@@ -124,7 +123,12 @@ def get_products(
                     sort_conditions.append(('rating', -1))
 
             if sort_conditions:
-                products_db = products_db.sort(sort_conditions)
+                products_db = mongo_client.product.find(query).skip(offset).limit(limit).sort(
+                    sort_conditions)
+                total_products = mongo_client.product.count_documents(query)
+        else:
+            products_db = mongo_client.product.find(query).skip(offset).limit(limit)
+            total_products = mongo_client.product.count_documents(query)
 
         # Convert and map products
         products = [ProductResponse(
@@ -156,7 +160,7 @@ def get_products(
         if price_max is not None:
             products = [p for p in products if p['cost'] <= price_max]
 
-        total_products = len(products)
+        # total_products = len(products) # This line is now redundant as total_products is calculated from MongoDB
 
         if total_products <= 0:
             raise HttpException(
@@ -166,16 +170,14 @@ def get_products(
             )
 
         # Apply pagination in-memory
-        offset = (index - 1) * Params.RECORDS_LIMIT
-        paginated_products = products[offset:offset + Params.RECORDS_LIMIT]
+        paginated_products = products # products is already paginated by MongoDB query
 
         total_page_records = len(paginated_products)
 
         def calculate_total_pages():
-            if total_products % Params.RECORDS_LIMIT == 0:
-                return int(total_products / Params.RECORDS_LIMIT)
-
-            return int(total_products / Params.RECORDS_LIMIT) + 1
+            if total_products % limit == 0:
+                return int(total_products / limit)
+            return int(total_products / limit) + 1
 
         return DataWithAdditional[List[ProductResponse], PaginationData](
             data=paginated_products,
