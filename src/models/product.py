@@ -23,7 +23,7 @@ class ProductDetails(CommonModel):
 
 class ProductDates(CommonModel):
     creation: datetime
-    restock: datetime
+    restock: Optional[datetime] = None
 
 
 class ProductVariants(CommonModel):
