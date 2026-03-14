@@ -7,7 +7,7 @@ from pydantic import Field, field_validator, BaseModel
 from src.models.product import ProductModel, AttributeType
 from src.shared.generics import CommonModel
 from src.utils.constants import PaymentMethodType
-from src.utils.regex import email_regex
+from src.utils.regex import email_regex, password_regex
 from src.utils.utils import validate_date
 
 
@@ -85,10 +85,9 @@ class UserRequest(CommonModel):
 
     @field_validator('password')
     def validate_password(cls, value):
-        if len(value) < 8:
-            raise ValueError('Password length must be greater or equal than 8')
-        if len(value) > 16:
-            raise ValueError('Password length must be less or equal than 16')
+        if not re.match(password_regex, value):
+            raise ValueError(
+                'Password must be at least 8 characters long, include at least one uppercase letter, one digit, and one special character')
 
         return value
 
